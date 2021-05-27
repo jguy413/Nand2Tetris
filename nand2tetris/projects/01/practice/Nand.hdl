@@ -1,0 +1,11 @@
+/** not-and gate. out = Not(And(x, y)) */
+
+CHIP Nand {
+    IN a, b;
+    OUT out;
+
+    // considered primitive so not necessary to implement
+    PARTS:
+    And(a=a, b=b, out=w);
+    Not(in=w, out=out);
+}

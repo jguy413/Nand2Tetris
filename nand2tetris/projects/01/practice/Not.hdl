@@ -1,0 +1,10 @@
+/** not gate. out = Not(x) */
+
+CHIP Not {
+    IN in;
+    OUT out;
+
+    // Not, built from Nand -- else could defer to primitive, avoid implementation..?
+    PARTS:
+    Nand(a=in, b=in, out=out);
+}

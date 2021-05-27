@@ -1,0 +1,120 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/05/CPU.hdl
+
+/**
+ * The Hack CPU (Central Processing unit), consisting of an ALU,
+ * two registers named A and D, and a program counter named PC.
+ * The CPU is designed to fetch and execute instructions written in 
+ * the Hack machine language. In particular, functions as follows:
+ * Executes the inputted instruction according to the Hack machine 
+ * language specification. The D and A in the language specification
+ * refer to CPU-resident registers, while M refers to the external
+ * memory location addressed by A, i.e. to Memory[A]. The inM input 
+ * holds the value of this location. If the current instruction needs 
+ * to write a value to M, the value is placed in outM, the address 
+ * of the target location is placed in the addressM output, and the 
+ * writeM control bit is asserted. (When writeM==0, any value may 
+ * appear in outM). The outM and writeM outputs are combinational: 
+ * they are affected instantaneously by the execution of the current 
+ * instruction. The addressM and pc outputs are clocked: although they 
+ * are affected by the execution of the current instruction, they commit 
+ * to their new values only in the next time step. If reset==1 then the 
+ * CPU jumps to address 0 (i.e. pc is set to 0 in next time step) rather 
+ * than to the address resulting from executing the current instruction. 
+ */
+
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+    
+
+    // 0 means A instruction (store constant), 1 means C instruction
+    Mux(a=false, b=true, sel=instruction[15], out=AorC);
+    Mux(a=false, b=instruction[3], sel=AorC, out=AorC3);
+    Mux(a=false, b=instruction[4], sel=AorC, out=AorC4);
+    Mux(a=true, b=instruction[5], sel=AorC, out=AorC5);
+    Mux(a=false, b=instruction[12], sel=AorC, out=AorC12);
+    
+    // A instruction means send instruction (constant) to A
+    // C instruction means send ALU output to A
+    Mux16(a=instruction, b=outALUtoMux, sel=AorC, out=toA);
+
+    // "d1" bit of instruction determines A-register load if C instruction, else load if A instruction
+    ARegister(in=toA, load=AorC5, out=outAtoMux, out=outAtoPC, out[0..14]=addressM);
+
+    // "a" bit of instruction determines use of A register if C instruction, else send A to ALU
+    Mux16(a=outAtoMux, b=inM, sel=AorC12, out=toALU);
+
+    // "d2" bit of instruction determines D-Register load if C instruction, else do not load value to D register
+    DRegister(in=outALUtoD, load=AorC4, out=outD);
+
+    // operate on ALU inputs as determined by instruction
+    ALU(x=outD, y=toALU, zx=instruction[11], nx=instruction[10], zy=instruction[9], ny=instruction[8], f=instruction[7], no=instruction[6], out=outALUtoD, out=outALUtoMux, out=outM, zr=zr, ng=ng);
+
+    // write to M?
+    Mux(a=false, b=true, sel=AorC3, out=writeM);
+
+
+    // Dmux to account for different jump scenarios
+    DMux8Way(in=true, sel=instruction[0..2], a=nojump, b=jgt, c=jeq, d=jge, e=jlt, f=jne, g=jle, h=jmp);
+
+    // negations of zr, ng
+    Not(in=zr, out=notzr);
+    Not(in=ng, out=notng);
+
+    // no jump condition
+    Not(in=nojump, out=jmp1);
+    // jgt condition
+    And(a=notzr, b=notng, out=gt);
+    And(a=jgt, b=gt, out=jmp2);
+    // jeq condition
+    And(a=jeq, b=zr, out=jmp3);
+    // jge condition
+    Or(a=zr, b=notng, out=ge);
+    And(a=jge, b=ge, out=jmp4);
+    // jlt condition
+    And(a=ng, b=notzr, out=lt);
+    And(a=jlt, b=lt, out=jmp5);
+    // jne condition
+    And(a=jne, b=notzr, out=jmp6);
+    // jle condition
+    Or(a=zr, b=ng, out=le);
+    And(a=jle, b=le, out=jmp7);
+    // jmp condition
+    And(a=jmp, b=true, out=jmp8);
+    // load bit determined by true case for any of the jump conditions 
+    Or(a=jmp2, b=jmp3, out=j2);
+    Or(a=j2, b=jmp4, out=j3);
+    Or(a=j3, b=jmp5, out=j4);
+    Or(a=j4, b=jmp6, out=j5);
+    Or(a=j5, b=jmp7, out=j6);
+    Or(a=j6, b=jmp8, out=j7);
+
+    // jump only when jump flag and no "nojump"
+    And(a=j7, b=jmp1, out=j8);
+    // jump only when C instruction
+    And(a=j8, b=AorC, out=j);
+
+    // PC -- j bits tell us which condition to check for in ALU output (determined by zr, ng)
+    PC(in=outAtoPC, load=j, inc=true, reset=reset, out[0..14]=pc);
+
+
+
+
+
+
+
+}
